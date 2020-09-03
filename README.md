@@ -1,4 +1,4 @@
-# Foobar
+# HDS Data Synchronizer
 <!-- Short description of the project. -->
 
 Service to synchronize data between Historical Datastore instances. 
