@@ -1,7 +1,6 @@
 package synchronizer
 
 import (
-	"context"
 	"log"
 	"net/url"
 	"time"
@@ -10,25 +9,47 @@ import (
 )
 
 type Controller struct {
-	primaryHDS  data.GrpcClient
-	mappingList *map[string]Replication
+	primaryHDS  *data.GrpcClient
+	mappingList map[string]*Replication
+	destConnMap map[string]*data.GrpcClient
 }
 
-func NewController() *Controller {
-	replicator := new(Controller)
-	replicator.mappingList = new(map[string][]Destination)
-	return replicator
+func NewController(primaryHDSHost string) (*Controller, error) {
+	controller := new(Controller)
+	hds, err := data.NewGrpcClient(primaryHDSHost) //
+	if err != nil {
+		return nil, err
+	}
+	controller.primaryHDS = hds
+	controller.mappingList = map[string]*Replication{}
+	controller.destConnMap = map[string]*data.GrpcClient{}
+	return controller, nil
 }
-func (c Controller) addToMappingList(series string, destinations []Destination) {
+
+func (c *Controller) AddOrUpdateSeries(series string, destinationHosts []string) {
+	destConns := map[string]*data.GrpcClient{}
+	for _, destHost := range destinationHosts {
+		if c.destConnMap[destHost] == nil {
+			conn, err := data.NewGrpcClient(destHost) //
+			if err != nil {
+				log.Printf("unable to connect to %s: %v", destHost, err)
+				continue
+			}
+			log.Printf("Connected to destionation host: %s", destHost)
+			c.destConnMap[destHost] = conn
+		}
+		destConns[destHost] = c.destConnMap[destHost]
+	}
 	if c.mappingList[series] == nil {
-		c.primaryHDS.Subscribe(context.Background(), series)
+		r := newReplication(series, c.primaryHDS, destConns)
+		c.mappingList[series] = r
+	} else {
+		r := c.mappingList[series]
+		r.updateDestinations(destConns)
 	}
 }
-func (c Replicator) updateMappingList(series string, destinations []Destination) {
 
-}
-
-func (r Replicator) removeSeries(series string) {
+func (c *Controller) removeSeries(series string) {
 
 }
 

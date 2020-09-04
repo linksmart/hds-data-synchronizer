@@ -5,9 +5,12 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"time"
+
+	"github.com/linksmart/hds-data-synchronizer/synchronizer"
 )
 
 type ThingDescriptionPage struct {
@@ -25,13 +28,19 @@ func main() {
 	//seriesMap := make(map[string][]string)
 	tddUrl := "http://localhost:8081/td"
 
-	primaryHDS := "dns://localhost:8088"
+	primaryHDS := "localhost:8088"
 
+	controller, err := synchronizer.NewController(primaryHDS)
+
+	if err != nil {
+		log.Panic("cannot connect to source hds")
+	}
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 	go func() {
 		for ; true; <-ticker.C {
-			TDDWatcher(primaryHDS, tddUrl)
+			TDDWatcher(primaryHDS, tddUrl, controller)
+			break
 		}
 	}()
 	// Ctrl+C / Kill handling
@@ -43,7 +52,7 @@ func main() {
 
 }
 
-func TDDWatcher(primaryHDS, tddUrl string) {
+func TDDWatcher(primaryHDS, tddUrl string, c *synchronizer.Controller) {
 
 	query := "xpath=*[primaryHDS='" + primaryHDS + "']"
 
@@ -72,16 +81,22 @@ func TDDWatcher(primaryHDS, tddUrl string) {
 		return
 	}
 	for _, td := range tdPage.Items {
-		streamName := td["series"].(string) //strings.TrimLeft(td["id"].(string),primaryHDS+"/data/")
+		seriesName := td["series"].(string) //strings.TrimLeft(td["id"].(string),primaryHDS+"/data/")
 		links := td["links"]
 		linkArr := links.([]interface{})
+		var destHosts []string
 		for _, val := range linkArr {
 			link := val.(map[string]interface{})
 			if link["rel"].(string) != "replica" {
 				continue
 			}
-			destHDS := link["href"].(string)
-			update(primaryHDS, destHDS, streamName)
+			href := link["href"].(string)
+			dstURL, err := url.Parse(href)
+			if err != nil {
+				log.Panicf("Error parsing dest url: %v", err)
+			}
+			destHosts = append(destHosts, dstURL.Host)
 		}
+		c.AddOrUpdateSeries(seriesName, destHosts)
 	}
 }
