@@ -24,12 +24,12 @@ github.com/golang/snappy
 # github.com/gorilla/mux v1.8.0
 ## explicit
 github.com/gorilla/mux
-# github.com/linksmart/go-sec v1.3.2
+# github.com/linksmart/go-sec v1.3.3
 github.com/linksmart/go-sec/auth/keycloak/obtainer
 github.com/linksmart/go-sec/auth/obtainer
 github.com/linksmart/go-sec/auth/validator
 github.com/linksmart/go-sec/authz
-# github.com/linksmart/historical-datastore v1.0.0-beta.10
+# github.com/linksmart/historical-datastore v1.0.0-beta.10 => C:\Users\devasya\Documents\git\hds\historical-datastore
 ## explicit
 github.com/linksmart/historical-datastore/common
 github.com/linksmart/historical-datastore/data
@@ -154,3 +154,4 @@ google.golang.org/protobuf/types/known/anypb
 google.golang.org/protobuf/types/known/durationpb
 google.golang.org/protobuf/types/known/structpb
 google.golang.org/protobuf/types/known/timestamppb
+# github.com/linksmart/historical-datastore => C:\Users\devasya\Documents\git\hds\historical-datastore

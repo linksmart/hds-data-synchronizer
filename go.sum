@@ -61,10 +61,8 @@ github.com/justinas/alice v0.0.0-20160512134231-052b8b6c18ed/go.mod h1:oLH0CmIax
 github.com/justinas/alice v1.2.0/go.mod h1:fN5HRH/reO/zrUflLfTN43t3vXvKzvZIENsNEe7i7qA=
 github.com/kelseyhightower/envconfig v1.3.0/go.mod h1:cccZRl6mQpaq41TPp5QxidR+Sa3axMbJDNb//FQX6Gg=
 github.com/linksmart/go-sec v1.0.1/go.mod h1:bTksBzP6fCEwIM43z8m3jSRa4YIAWdUwMBYjcoftm1c=
-github.com/linksmart/go-sec v1.3.2 h1:FSW9bvXGFZouNAqJYuv9Kh7Bfhbkezt9V/6/hbgMbAw=
-github.com/linksmart/go-sec v1.3.2/go.mod h1:W9EZRLqptioAzaxMjWEKzd5jye53aoRzMi4KO+FCFjY=
-github.com/linksmart/historical-datastore v1.0.0-beta.10 h1:cawDoXMyGXDgo44YRt2F7P4Z5V7nnMc21pZCXEOyglk=
-github.com/linksmart/historical-datastore v1.0.0-beta.10/go.mod h1:YV0kYOdjGkOc3ISNiwkRj2ykFSpfNgfNkj3fCqj7BE4=
+github.com/linksmart/go-sec v1.3.3 h1:i+wVndlGK4jWujpFWxn1rXZpxkSvDj8GLf9KXAZkTZk=
+github.com/linksmart/go-sec v1.3.3/go.mod h1:W9EZRLqptioAzaxMjWEKzd5jye53aoRzMi4KO+FCFjY=
 github.com/linksmart/service-catalog/v2 v2.4.1 h1:/gtc/9AvLGbabYc0wsfGRhqpS2s68v9wH7WTQbGLG+c=
 github.com/linksmart/service-catalog/v2 v2.4.1/go.mod h1:aIfziWy3rusDlaoEIeoML6XV68RVFdNm+i58X9inXcY=
 github.com/mattn/go-sqlite3 v2.0.3+incompatible h1:gXHsfypPkaMZrKbD5209QV9jbUTJKjyR5WD3HYQSd+U=

@@ -8,9 +8,12 @@ import (
 	"github.com/linksmart/historical-datastore/data"
 )
 
+var info log.Logger
+var debug log.Logger
+
 type Controller struct {
 	primaryHDS  *data.GrpcClient
-	mappingList map[string]*Replication
+	mappingList map[string]*Synchronization
 	destConnMap map[string]*data.GrpcClient
 }
 
@@ -21,7 +24,7 @@ func NewController(primaryHDSHost string) (*Controller, error) {
 		return nil, err
 	}
 	controller.primaryHDS = hds
-	controller.mappingList = map[string]*Replication{}
+	controller.mappingList = map[string]*Synchronization{}
 	controller.destConnMap = map[string]*data.GrpcClient{}
 	return controller, nil
 }
@@ -33,7 +36,7 @@ func (c *Controller) AddOrUpdateSeries(series string, destinationHosts []string)
 			conn, err := data.NewGrpcClient(destHost) //
 			if err != nil {
 				log.Printf("unable to connect to %s: %v", destHost, err)
-				continue
+				continue //ToDo: A retry atempt for failed nodes
 			}
 			log.Printf("Connected to destionation host: %s", destHost)
 			c.destConnMap[destHost] = conn
@@ -41,11 +44,12 @@ func (c *Controller) AddOrUpdateSeries(series string, destinationHosts []string)
 		destConns[destHost] = c.destConnMap[destHost]
 	}
 	if c.mappingList[series] == nil {
-		r := newReplication(series, c.primaryHDS, destConns)
+		r := newSynchronization(series, c.primaryHDS, destConns)
 		c.mappingList[series] = r
 	} else {
-		r := c.mappingList[series]
-		r.updateDestinations(destConns)
+		s := c.mappingList[series]
+		s.updateDestionations(destinationHosts)
+
 	}
 }
 
