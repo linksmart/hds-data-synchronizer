@@ -8,6 +8,7 @@ github.com/farshidtz/elog
 # github.com/farshidtz/senml-protobuf/go v0.0.0-20200401104923-1a78cd1643d7
 github.com/farshidtz/senml-protobuf/go
 # github.com/farshidtz/senml/v2 v2.0.1-0.20200510133550-09f0cc3f0378
+## explicit
 github.com/farshidtz/senml/v2
 github.com/farshidtz/senml/v2/codec
 # github.com/fxamacker/cbor/v2 v2.2.0
@@ -29,7 +30,7 @@ github.com/linksmart/go-sec/auth/keycloak/obtainer
 github.com/linksmart/go-sec/auth/obtainer
 github.com/linksmart/go-sec/auth/validator
 github.com/linksmart/go-sec/authz
-# github.com/linksmart/historical-datastore v1.0.0-beta.10 => C:\Users\devasya\Documents\git\hds\historical-datastore
+# github.com/linksmart/historical-datastore v1.0.0-beta.10.0.20200915110710-f8ab21526230
 ## explicit
 github.com/linksmart/historical-datastore/common
 github.com/linksmart/historical-datastore/data
@@ -154,4 +155,3 @@ google.golang.org/protobuf/types/known/anypb
 google.golang.org/protobuf/types/known/durationpb
 google.golang.org/protobuf/types/known/structpb
 google.golang.org/protobuf/types/known/timestamppb
-# github.com/linksmart/historical-datastore => C:\Users\devasya\Documents\git\hds\historical-datastore

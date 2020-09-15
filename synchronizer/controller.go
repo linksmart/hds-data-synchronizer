@@ -2,8 +2,6 @@ package synchronizer
 
 import (
 	"log"
-	"net/url"
-	"time"
 
 	"github.com/linksmart/historical-datastore/data"
 )
@@ -48,42 +46,10 @@ func (c *Controller) AddOrUpdateSeries(series string, destinationHosts []string)
 		c.mappingList[series] = r
 	} else {
 		s := c.mappingList[series]
-		s.updateDestionations(destinationHosts)
-
+		s.updateDestionations(destConns)
 	}
 }
 
 func (c *Controller) removeSeries(series string) {
-
-}
-
-func SubscribeAndPublish(srcEndpoint string, destEndpoint string, stream string) {
-	srcUrl, err := url.Parse(srcEndpoint)
-	if err != nil {
-		log.Panicf("Error parsing source url: %v", err)
-	}
-	dstURL, err := url.Parse(destEndpoint)
-	if err != nil {
-		log.Panicf("Error parsing dest url: %v", err)
-	}
-	src, err := data.NewGrpcClient(srcUrl.Host) //
-	if err != nil {
-		log.Panic(err)
-	}
-	total, err := src.Count([]string{stream}, data.Query{To: time.Now(), From: time.Now().Add(-time.Hour * 24)})
-	if err != nil {
-		log.Printf("Error getting total: %v", err)
-	}
-
-	log.Println(total)
-	dst, err := data.NewGrpcClient(dstURL.Host) //
-	if err != nil {
-		log.Panic(err)
-	}
-	totalDest, err := dst.Count([]string{stream}, data.Query{To: time.Now(), From: time.Now().Add(-time.Hour * 24)})
-	if err != nil {
-		log.Printf("Error getting total: %v", err)
-	}
-	log.Println(totalDest)
-
+	c.mappingList[series].clear()
 }
