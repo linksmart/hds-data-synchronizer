@@ -25,15 +25,19 @@ github.com/golang/snappy
 # github.com/gorilla/mux v1.8.0
 ## explicit
 github.com/gorilla/mux
+# github.com/kelseyhightower/envconfig v1.3.0
+## explicit
+github.com/kelseyhightower/envconfig
 # github.com/linksmart/go-sec v1.3.3
 github.com/linksmart/go-sec/auth/keycloak/obtainer
 github.com/linksmart/go-sec/auth/obtainer
 github.com/linksmart/go-sec/auth/validator
 github.com/linksmart/go-sec/authz
-# github.com/linksmart/historical-datastore v1.0.0-beta.10.0.20200915110710-f8ab21526230
+# github.com/linksmart/historical-datastore v1.0.0-beta.10.0.20200915110710-f8ab21526230 => ..\hds\historical-datastore
 ## explicit
 github.com/linksmart/historical-datastore/common
 github.com/linksmart/historical-datastore/data
+github.com/linksmart/historical-datastore/pki
 github.com/linksmart/historical-datastore/protobuf/go
 github.com/linksmart/historical-datastore/registry
 # github.com/linksmart/service-catalog/v2 v2.4.1
@@ -43,6 +47,7 @@ github.com/mattn/go-sqlite3
 # github.com/satori/go.uuid v1.2.0
 github.com/satori/go.uuid
 # github.com/syndtr/goleveldb v1.0.0
+## explicit
 github.com/syndtr/goleveldb/leveldb
 github.com/syndtr/goleveldb/leveldb/cache
 github.com/syndtr/goleveldb/leveldb/comparer
@@ -70,7 +75,7 @@ golang.org/x/net/trace
 golang.org/x/net/websocket
 # golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
 ## explicit
-# golang.org/x/sys v0.0.0-20200501145240-bc7a7d42d5c3
+# golang.org/x/sys v0.0.0-20200922070232-aee5d888a860
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
 # golang.org/x/text v0.3.2
@@ -81,6 +86,7 @@ golang.org/x/text/unicode/norm
 # google.golang.org/genproto v0.0.0-20200507105951-43844f6eee31
 google.golang.org/genproto/googleapis/rpc/status
 # google.golang.org/grpc v1.29.1
+## explicit
 google.golang.org/grpc
 google.golang.org/grpc/attributes
 google.golang.org/grpc/backoff
@@ -155,3 +161,4 @@ google.golang.org/protobuf/types/known/anypb
 google.golang.org/protobuf/types/known/durationpb
 google.golang.org/protobuf/types/known/structpb
 google.golang.org/protobuf/types/known/timestamppb
+# github.com/linksmart/historical-datastore => ..\hds\historical-datastore

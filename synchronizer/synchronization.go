@@ -56,7 +56,7 @@ func newSynchronization(series string, sourceClient *data.GrpcClient, destinatio
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 
 	s.addDestinations(destinations)
-	go s.replicate()
+	go s.synchronize()
 	return s
 }
 
@@ -69,10 +69,18 @@ func (s Synchronization) clear() {
 	}
 }
 
-func (s Synchronization) replicate() {
-	var err error
+func (s Synchronization) synchronize() {
+	for true {
+		s.subscribeAndPublish()
+		time.Sleep(time.Second)
+		log.Printf("retrying subscription")
+	}
 
+}
+
+func (s Synchronization) subscribeAndPublish() {
 	// get the latest measurement from source
+	var err error
 	s.latest, err = getLastTime(s.sourceClient, s.series, time.Time{}, time.Now())
 	if err != nil {
 		log.Printf("error getting latest measurement:%v", err)
@@ -90,6 +98,7 @@ func (s Synchronization) replicate() {
 	for response := range responseCh {
 		if response.Err != nil {
 			log.Printf("error while recieving stream: %v", response.Err)
+			return
 		}
 		pack := response.Pack
 		latestInPack := getLatestInPack(pack)
@@ -115,7 +124,7 @@ func (s Synchronization) replicate() {
 }
 
 func getLatestInPack(pack senml.Pack) time.Time {
-	//Since it is not assured that the pack will be sorted, we search eshaustively to find the latest
+	//Since it is not assured that the pack will be sorted, we search exhaustively to find the latest
 	latestInPack := pack[0].Time
 	for _, r := range pack {
 		if r.Time > latestInPack {
@@ -200,7 +209,7 @@ func (s Synchronization) fallback(dest string, from time.Time, to time.Time) {
 	} else if to.Before(destLatest) {
 		log.Println("destination is ahead of source. Should not have happened!!")
 	} else {
-		log.Printf("Starting fallback for destination :%s, series: %s", dest, s.series)
+		log.Printf("Starting fallback for destination :%s, series: %s, dest latest: %v, to:%v", dest, s.series, destLatest, to)
 	}
 	ctx := destination.ctx
 	destStream, err := destination.client.CreateSubmitStream(ctx)

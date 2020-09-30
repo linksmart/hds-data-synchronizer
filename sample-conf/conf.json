@@ -1,0 +1,23 @@
+{
+  "hds": "localhost:8088",
+  "tdd": "http://localhost:8081",
+  "tls": {
+    "ca": "./caCert.pem",
+    "key": "./key.pem",
+    "sourceHDSCA": "http://localhost:8085/pki",
+    "storage": {
+      "type": "leveldb",
+      "dsn": "./certificates"
+    },
+    "certData":{
+      "country": "DE",
+      "province": "NRW",
+      "locality": "SA",
+      "organization": "Fraunhofer",
+      "organizationalUnit": "FIT",
+      "commonName": "*.fit.fraunhofer.de",
+      "dnsNames":"localhost",
+      "ipAddresses": "127.0.0.1"
+    }
+  }
+}

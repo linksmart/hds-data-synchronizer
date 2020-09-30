@@ -2,14 +2,20 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
+	"github.com/kelseyhightower/envconfig"
+	"github.com/linksmart/hds-data-synchronizer/certs"
+	"github.com/linksmart/hds-data-synchronizer/common"
 	"github.com/linksmart/hds-data-synchronizer/synchronizer"
 )
 
@@ -26,37 +32,74 @@ type ThingDescription = map[string]interface{}
 func main() {
 	// a map containing the array of destination replica nodes for each series name
 	//seriesMap := make(map[string][]string)
-	tddUrl := "http://localhost:8081/td"
+	var (
+		confPath = flag.String("conf", "conf/conf.json", "HDS Sync configuration file path")
+	)
+	flag.Parse()
 
-	primaryHDS := "localhost:8088"
+	conf, err := loadConfig(confPath)
+	if err != nil {
+		log.Panicf("Cannot load configuration: %v", err)
+	}
+	var store certs.Store
+	var closeCertStore func() error
+	if conf.TLS.Storage.Type == certs.LEVELDB {
+		store, closeCertStore, err = certs.NewLevelDBStorage(conf.TLS.Storage.DSN)
+		if err != nil {
+			log.Panicf("Failed to start leveldb: %v", err)
+		}
+	}
 
-	controller, err := synchronizer.NewController(primaryHDS)
+	cd, err := certs.NewCertDirectory(conf.TLS, store)
+	if err != nil {
+		log.Panicf("Cannot initiate certificate directory: %v", err)
+	}
+
+	controller, err := synchronizer.NewController(conf.HDS, conf.TLS.SourceHDSCA, cd)
 
 	if err != nil {
-		log.Panic("cannot connect to source hds")
+		log.Panicf("Cannot connect to source hds: %v", err)
 	}
+	tddEndpoint := strings.TrimLeft(conf.TDD, "/") + "/td"
 	ticker := time.NewTicker(1 * time.Minute)
-	defer ticker.Stop()
-	go func() {
-		for ; true; <-ticker.C {
-			TDDWatcher(primaryHDS, tddUrl, controller)
-			break
-		}
-	}()
-	// Ctrl+C / Kill handling
+
 	handler := make(chan os.Signal, 1)
+	// Ctrl+C / Kill handling
 	signal.Notify(handler, os.Interrupt, os.Kill)
 
-	<-handler
-	log.Println("stopping...")
+	defer ticker.Stop()
+
+	TDDWatcher(conf.HDS, tddEndpoint, controller)
+
+TDDWatchLoop:
+	for true {
+		select {
+		case <-ticker.C:
+			TDDWatcher(conf.HDS, tddEndpoint, controller)
+		case <-handler:
+			log.Println("breaking the TDD watcher loop")
+			break TDDWatchLoop
+		}
+	}
+
+	log.Println("Shutting down...")
+
+	if closeCertStore != nil {
+		err := closeCertStore()
+		if err != nil {
+			log.Println(err.Error())
+		}
+	}
 
 }
 
-func TDDWatcher(primaryHDS, tddUrl string, c *synchronizer.Controller) {
+func TDDWatcher(primaryHDS, tddEndpoint string, c *synchronizer.Controller) {
+
+	log.Printf("Updating the list based on TD : %s", tddEndpoint)
 
 	query := "xpath=*[primaryHDS='" + primaryHDS + "']"
 
-	res, err := http.Get(tddUrl + "?" + query)
+	res, err := http.Get(tddEndpoint + "?" + query)
 
 	if err != nil {
 		log.Printf("requesting TD failed!!")
@@ -99,4 +142,51 @@ func TDDWatcher(primaryHDS, tddUrl string, c *synchronizer.Controller) {
 		}
 		c.AddOrUpdateSeries(seriesName, destHosts)
 	}
+}
+
+// loads service configuration from a file at the given path
+func loadConfig(confPath *string) (*common.Config, error) {
+	file, err := ioutil.ReadFile(*confPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var conf common.Config
+	err = json.Unmarshal(file, &conf)
+	if err != nil {
+		return nil, err
+	}
+
+	// Override loaded values with environment variables
+	err = envconfig.Process("sync", &conf)
+	if err != nil {
+		return nil, err
+	}
+
+	if conf.HDS == "" || conf.TDD == "" {
+		return nil, fmt.Errorf("HDS and TDD endpoints have to be defined")
+	}
+	_, err = url.Parse(conf.HDS)
+	if err != nil {
+		return nil, fmt.Errorf("HDS endpoint should be a valid URL")
+	}
+	_, err = url.Parse(conf.TDD)
+	if err != nil {
+		return nil, fmt.Errorf("TDD endpoint should be a valid URL")
+	}
+
+	if !certs.SupportedBackends(conf.TLS.Storage.Type) {
+		return nil, fmt.Errorf("backend type is not supported: %s", conf.TLS.Storage.Type)
+	}
+
+	if common.FileExists(conf.TLS.CA) == false {
+		return nil, fmt.Errorf("CA file '%s' does not exist", conf.TLS.CA)
+	}
+
+	_, err = url.Parse(conf.TLS.Storage.DSN)
+	if err != nil {
+		return nil, err
+	}
+
+	return &conf, nil
 }
