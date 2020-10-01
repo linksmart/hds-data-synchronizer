@@ -17,8 +17,8 @@ var debug log.Logger
 
 type Controller struct {
 	primaryHDS  *data.GrpcClient
-	mappingList map[string]*Synchronization
-	destConnMap map[string]*data.GrpcClient
+	mappingList map[string]*Synchronization //series to destination map
+	destConnMap map[string]*data.GrpcClient //destination to connection map
 	cd          *certs.CertDirectory
 }
 
@@ -40,11 +40,11 @@ func NewController(primaryHDSHost string, srcHDSCA string, cd *certs.CertDirecto
 	return controller, nil
 }
 
-func (c *Controller) AddOrUpdateSeries(series string, destinationHosts []string) {
+func (c *Controller) AddOrUpdateSeries(series string, destinationHosts []string, caEndpoints []string) {
 	destConns := map[string]*data.GrpcClient{}
-	for _, destHost := range destinationHosts {
+	for i, destHost := range destinationHosts {
 		if c.destConnMap[destHost] == nil {
-			creds, err := getCreds(c.cd, destHost)
+			creds, err := getCreds(c.cd, destHost, caEndpoints[i])
 			if err != nil {
 				log.Printf("unable to setup TLS: host:%s, err:%v", destHost, err)
 				continue

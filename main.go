@@ -128,6 +128,7 @@ func TDDWatcher(primaryHDS, tddEndpoint string, c *synchronizer.Controller) {
 		links := td["links"]
 		linkArr := links.([]interface{})
 		var destHosts []string
+		var caEndpoints []string
 		for _, val := range linkArr {
 			link := val.(map[string]interface{})
 			if link["rel"].(string) != "replica" {
@@ -139,8 +140,11 @@ func TDDWatcher(primaryHDS, tddEndpoint string, c *synchronizer.Controller) {
 				log.Panicf("Error parsing dest url: %v", err)
 			}
 			destHosts = append(destHosts, dstURL.Host)
+
+			caEndpoint := link["caEndpoint"].(string)
+			caEndpoints = append(caEndpoints, caEndpoint)
 		}
-		c.AddOrUpdateSeries(seriesName, destHosts)
+		c.AddOrUpdateSeries(seriesName, destHosts, caEndpoints)
 	}
 }
 

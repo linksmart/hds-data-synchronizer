@@ -91,11 +91,11 @@ func (cd CertDirectory) GetCert(hdsUrl string, caEndpoint string) (*x509.Certifi
 
 	res, err := http.Post(caEndpoint, "application/x-pem-file", bytes.NewReader(csr))
 	if err != nil {
-		return nil, fmt.Errorf("error posting to %s: %v", endpoint, err)
+		return nil, fmt.Errorf("error posting to %s: %v", caEndpoint, err)
 	}
 
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status from %s, %d", endpoint, res.StatusCode)
+		return nil, fmt.Errorf("unexpected status from %s, %d", caEndpoint, res.StatusCode)
 	}
 
 	certPEM, err := ioutil.ReadAll(res.Body)
@@ -104,7 +104,7 @@ func (cd CertDirectory) GetCert(hdsUrl string, caEndpoint string) (*x509.Certifi
 	}
 	cert, err = pki.PEMToCertificate(certPEM)
 	if err != nil {
-		return nil, fmt.Errorf("error decoding cert pem from %s: %v", endpoint, err)
+		return nil, fmt.Errorf("error decoding cert pem from %s: %v", caEndpoint, err)
 	}
 	err = cd.store.add(hdsUrl, *cert)
 	if err != nil {
