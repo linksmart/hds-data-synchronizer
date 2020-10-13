@@ -2,7 +2,7 @@
   "hds": "localhost:8088",
   "tdd": "http://localhost:8081",
   "tls": {
-    "ca": "./caCert.pem",
+    "ca": "./cert.pem",
     "key": "./key.pem",
     "sourceHDSCA": "http://localhost:8085/pki",
     "storage": {
