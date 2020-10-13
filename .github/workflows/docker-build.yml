@@ -19,7 +19,7 @@ jobs:
 
       - name: Build image
         if: success()
-        run: docker build -t linksmart/hds-datasync
+        run: docker build -t linksmart/hds-datasync .
 
       - name: Push latest docker image
         run: docker push linksmart/hds-datasync:latest
