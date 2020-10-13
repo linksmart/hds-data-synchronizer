@@ -1,0 +1,25 @@
+name: docker-build
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  docker:
+    name: Build and push docker image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        if: success()
+        uses: actions/checkout@v2
+
+      - name: Docker login
+        if: success()
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USER }}" --password-stdin
+
+      - name: Build image
+        if: success()
+        run: docker build -t linksmart/hds-datasync
+
+      - name: Push latest docker image
+        run: docker push linksmart/hds-datasync:latest
