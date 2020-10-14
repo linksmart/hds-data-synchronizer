@@ -22,7 +22,7 @@ LABEL NAME="LinkSmart HDS data synchronizer"
 COPY --from=builder /home/hds-data-synchronizer .
 COPY sample-conf/conf.json /home/conf/
 
-ENV SYNC_TLS_CA=/tls/cert.pem
+ENV SYNC_TLS_CA=/tls/ca.pem
 ENV SYNC_TLS_KEY=/tls/key.pem
 ENV SYNC_TLS_STORAGE_DSN=/tls/certificates
 

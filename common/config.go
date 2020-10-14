@@ -14,11 +14,16 @@ type Config struct {
 }
 
 type TLSConfig struct {
-	CA          string          `json:"ca"`
-	Key         string          `json:"key"`
-	SourceHDSCA string          `json:"sourceHdsCa"` //This is the url of source HDS's CA.
-	Storage     StorageConfig   `json:"storage"`
-	CertData    common.CertData `json:"certData"`
+	// CA is the  Certificate of CA
+	CA string `json:"ca"`
+	// key is the private key of the client
+	Key string `json:"key"`
+	// SourceHDSCA is the url of source HDS's CA.
+	SourceHDSCA string `json:"sourceHdsCa"`
+	// Storage config for the server certificates
+	Storage StorageConfig `json:"storage"`
+	// CertData contains the Data sent along the CSR
+	CertData common.CertData `json:"certData"`
 }
 type StorageConfig struct {
 	DSN  string `json:"dsn"`
