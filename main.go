@@ -3,19 +3,15 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"strings"
 	"time"
 
-	"github.com/kelseyhightower/envconfig"
 	"github.com/linksmart/hds-data-synchronizer/certs"
-	"github.com/linksmart/hds-data-synchronizer/common"
 	"github.com/linksmart/hds-data-synchronizer/synchronizer"
 )
 
@@ -43,19 +39,13 @@ func main() {
 	}
 	var store certs.Store
 	var closeCertStore func() error
-	if conf.TLS.Storage.Type == certs.LEVELDB {
-		store, closeCertStore, err = certs.NewLevelDBStorage(conf.TLS.Storage.DSN)
-		if err != nil {
-			log.Panicf("Failed to start leveldb: %v", err)
-		}
-	}
 
 	cd, err := certs.NewCertDirectory(conf.TLS, store)
 	if err != nil {
 		log.Panicf("Cannot initiate certificate directory: %v", err)
 	}
 
-	controller, err := synchronizer.NewController(conf.HDS, conf.TLS.SourceHDSCA, cd)
+	controller, err := synchronizer.NewController(conf.HDS, cd)
 
 	if err != nil {
 		log.Panicf("Cannot connect to source hds: %v", err)
@@ -135,62 +125,11 @@ func TDDWatcher(primaryHDS, tddEndpoint string, c *synchronizer.Controller) {
 				continue
 			}
 			href := link["href"].(string)
-			dstURL, err := url.Parse(href)
-			if err != nil {
-				log.Panicf("Error parsing dest url: %v", err)
-			}
-			destHosts = append(destHosts, dstURL.Host)
+			destHosts = append(destHosts, href)
 
 			caEndpoint := link["caEndpoint"].(string)
 			caEndpoints = append(caEndpoints, caEndpoint)
 		}
 		c.AddOrUpdateSeries(seriesName, destHosts, caEndpoints)
 	}
-}
-
-// loads service configuration from a file at the given path
-func loadConfig(confPath *string) (*common.Config, error) {
-	file, err := ioutil.ReadFile(*confPath)
-	if err != nil {
-		return nil, err
-	}
-
-	var conf common.Config
-	err = json.Unmarshal(file, &conf)
-	if err != nil {
-		return nil, err
-	}
-
-	// Override loaded values with environment variables
-	err = envconfig.Process("sync", &conf)
-	if err != nil {
-		return nil, err
-	}
-
-	if conf.HDS == "" || conf.TDD == "" {
-		return nil, fmt.Errorf("HDS and TDD endpoints have to be defined")
-	}
-	_, err = url.Parse(conf.HDS)
-	if err != nil {
-		return nil, fmt.Errorf("HDS endpoint should be a valid URL")
-	}
-	_, err = url.Parse(conf.TDD)
-	if err != nil {
-		return nil, fmt.Errorf("TDD endpoint should be a valid URL")
-	}
-
-	if !certs.SupportedBackends(conf.TLS.Storage.Type) {
-		return nil, fmt.Errorf("backend type is not supported: %s", conf.TLS.Storage.Type)
-	}
-
-	if common.FileExists(conf.TLS.CA) == false {
-		return nil, fmt.Errorf("CA file '%s' does not exist", conf.TLS.CA)
-	}
-
-	_, err = url.Parse(conf.TLS.Storage.DSN)
-	if err != nil {
-		return nil, err
-	}
-
-	return &conf, nil
 }

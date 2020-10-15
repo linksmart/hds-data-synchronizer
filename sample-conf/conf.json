@@ -4,20 +4,6 @@
   "tls": {
     "ca": "./ca.pem",
     "key": "./key.pem",
-    "sourceHDSCA": "http://localhost:8085/pki",
-    "storage": {
-      "type": "leveldb",
-      "dsn": "./certificates"
-    },
-    "certData":{
-      "country": "DE",
-      "province": "NRW",
-      "locality": "SA",
-      "organization": "Fraunhofer",
-      "organizationalUnit": "FIT",
-      "commonName": "*.fit.fraunhofer.de",
-      "dnsNames":"localhost",
-      "ipAddresses": "127.0.0.1"
-    }
+    "cert": "./cert.pem"
   }
 }

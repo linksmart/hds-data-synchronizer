@@ -4,6 +4,9 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
+	"net"
+	"net/url"
+	"strings"
 
 	"github.com/linksmart/hds-data-synchronizer/certs"
 	"github.com/linksmart/historical-datastore/data"
@@ -22,16 +25,20 @@ type Controller struct {
 	cd          *certs.CertDirectory
 }
 
-func NewController(primaryHDSHost string, srcHDSCA string, cd *certs.CertDirectory) (*Controller, error) {
+func NewController(primaryHDSHost string, cd *certs.CertDirectory) (*Controller, error) {
 	controller := new(Controller)
 	controller.cd = cd
-	creds, err := getCreds(cd, primaryHDSHost, srcHDSCA)
+	creds, err := getCreds(cd, primaryHDSHost)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to initialize the transport credentials for %s: %v", primaryHDSHost, err)
 	}
-	hds, err := data.NewGrpcClient(primaryHDSHost, grpc.WithTransportCredentials(*creds)) //
+	hostUrl, err := url.Parse(primaryHDSHost)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse url %s: %v", primaryHDSHost, err)
+	}
+	hds, err := data.NewGrpcClient(hostUrl.Host, grpc.WithTransportCredentials(*creds)) //
+	if err != nil {
+		return nil, fmt.Errorf("unable to connect to %s: %v", primaryHDSHost, err)
 	}
 	log.Printf("connected to source: %s", primaryHDSHost)
 	controller.primaryHDS = hds
@@ -42,14 +49,19 @@ func NewController(primaryHDSHost string, srcHDSCA string, cd *certs.CertDirecto
 
 func (c *Controller) AddOrUpdateSeries(series string, destinationHosts []string, caEndpoints []string) {
 	destConns := map[string]*data.GrpcClient{}
-	for i, destHost := range destinationHosts {
+	for _, destHost := range destinationHosts {
 		if c.destConnMap[destHost] == nil {
-			creds, err := getCreds(c.cd, destHost, caEndpoints[i])
+			creds, err := getCreds(c.cd, destHost)
 			if err != nil {
 				log.Printf("unable to setup TLS: host:%s, err:%v", destHost, err)
 				continue
 			}
-			conn, err := data.NewGrpcClient(destHost, grpc.WithTransportCredentials(*creds)) //
+			hostUrl, err := url.Parse(destHost)
+			if err != nil {
+				log.Printf("failed to parse %s: %v", destHost, err)
+				continue //ToDo: A retry atempt for failed nodes
+			}
+			conn, err := data.NewGrpcClient(hostUrl.Host, grpc.WithTransportCredentials(*creds)) //
 			if err != nil {
 				log.Printf("unable to connect to %s: %v", destHost, err)
 				continue //ToDo: A retry atempt for failed nodes
@@ -72,11 +84,8 @@ func (c *Controller) removeSeries(series string) {
 	c.mappingList[series].clear()
 }
 
-func getCreds(cd *certs.CertDirectory, addr string, caEndpoint string) (*credentials.TransportCredentials, error) {
-	cert, err := cd.GetCert(addr, caEndpoint)
-	if err != nil {
-		return nil, fmt.Errorf("error in GetCert: %v", err)
-	}
+func getCreds(cd *certs.CertDirectory, addr string) (*credentials.TransportCredentials, error) {
+	cert := cd.Cert
 	certPEM, err := pki.CertificateToPEM(*cert)
 	if err != nil {
 		return nil, fmt.Errorf("error converting cert to PEM: %v", err)
@@ -89,9 +98,19 @@ func getCreds(cd *certs.CertDirectory, addr string, caEndpoint string) (*credent
 
 	certificate, err := tls.X509KeyPair(certPEM, keyPEM)
 	certPool := cd.CAPool
-
+	serverUrl, err := url.Parse(addr)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing the url %s: %v", addr, err)
+	}
+	host := serverUrl.Host
+	if strings.Contains(host, ":") {
+		host, _, err = net.SplitHostPort(serverUrl.Host)
+		if err != nil {
+			return nil, fmt.Errorf("error splitting the port and host name from %s: %v", addr, err)
+		}
+	}
 	creds := credentials.NewTLS(&tls.Config{
-		ServerName:   addr, // NOTE: this is required!
+		ServerName:   host,
 		Certificates: []tls.Certificate{certificate},
 		RootCAs:      certPool,
 	})
