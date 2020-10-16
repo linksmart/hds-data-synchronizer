@@ -29,7 +29,7 @@ func loadConfig(confPath *string) (*common.Config, error) {
 		return nil, err
 	}
 
-	if conf.HDS == "" || conf.TDD == "" {
+	if conf.HDS == "" || conf.TDDConf.Endpoint == "" {
 		return nil, fmt.Errorf("HDS and TDD endpoints have to be defined")
 	}
 	hdsUrl, err := url.Parse(conf.HDS)
@@ -39,7 +39,7 @@ func loadConfig(confPath *string) (*common.Config, error) {
 	if hdsUrl.Host == "" {
 		return nil, fmt.Errorf("missing schema or hostname from HDS endpoint")
 	}
-	_, err = url.Parse(conf.TDD)
+	_, err = url.Parse(conf.TDDConf.Endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("TDD endpoint should be a valid URL")
 	}

@@ -11,8 +11,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/linksmart/go-sec/auth/obtainer"
 	"github.com/linksmart/hds-data-synchronizer/certs"
+	"github.com/linksmart/hds-data-synchronizer/common"
 	"github.com/linksmart/hds-data-synchronizer/synchronizer"
+	"github.com/linksmart/hds-data-synchronizer/utils"
 )
 
 type ThingDescriptionPage struct {
@@ -50,7 +53,7 @@ func main() {
 	if err != nil {
 		log.Panicf("Cannot connect to source hds: %v", err)
 	}
-	tddEndpoint := strings.TrimLeft(conf.TDD, "/") + "/td"
+
 	ticker := time.NewTicker(1 * time.Minute)
 
 	handler := make(chan os.Signal, 1)
@@ -59,13 +62,13 @@ func main() {
 
 	defer ticker.Stop()
 
-	TDDWatcher(conf.HDS, tddEndpoint, controller)
+	TDDWatcher(conf.HDS, conf.TDDConf, controller)
 
 TDDWatchLoop:
 	for true {
 		select {
 		case <-ticker.C:
-			TDDWatcher(conf.HDS, tddEndpoint, controller)
+			TDDWatcher(conf.HDS, conf.TDDConf, controller)
 		case <-handler:
 			log.Println("breaking the TDD watcher loop")
 			break TDDWatchLoop
@@ -83,16 +86,28 @@ TDDWatchLoop:
 
 }
 
-func TDDWatcher(primaryHDS, tddEndpoint string, c *synchronizer.Controller) {
-
+func TDDWatcher(primaryHDS string, tddConf common.TDDConf, c *synchronizer.Controller) {
+	tddEndpoint := strings.TrimLeft(tddConf.Endpoint, "/") + "/td"
 	log.Printf("Updating the list based on TD : %s", tddEndpoint)
 
 	query := "xpath=*[primaryHDS='" + primaryHDS + "']"
+	urlStr := tddEndpoint + "?" + query
+	var ticket *obtainer.Client
+	var err error
+	if tddConf.Auth.Enabled {
+		ticket, err = obtainer.NewClient(tddConf.Auth.Provider, tddConf.Auth.ProviderURL, tddConf.Auth.Username, tddConf.Auth.Password, tddConf.Auth.ClientID)
+		if err != nil {
+			log.Printf("error creating auth client: %s", err)
+			return
+		}
+	}
 
-	res, err := http.Get(tddEndpoint + "?" + query)
+	res, err := utils.HTTPRequest("GET",
+		urlStr,
+		nil, nil, ticket)
 
 	if err != nil {
-		log.Printf("requesting TD failed!!")
+		log.Printf("requesting TD failed: %v", err)
 		return
 	}
 
@@ -118,7 +133,6 @@ func TDDWatcher(primaryHDS, tddEndpoint string, c *synchronizer.Controller) {
 		links := td["links"]
 		linkArr := links.([]interface{})
 		var destHosts []string
-		var caEndpoints []string
 		for _, val := range linkArr {
 			link := val.(map[string]interface{})
 			if link["rel"].(string) != "replica" {
@@ -126,10 +140,7 @@ func TDDWatcher(primaryHDS, tddEndpoint string, c *synchronizer.Controller) {
 			}
 			href := link["href"].(string)
 			destHosts = append(destHosts, href)
-
-			caEndpoint := link["caEndpoint"].(string)
-			caEndpoints = append(caEndpoints, caEndpoint)
 		}
-		c.AddOrUpdateSeries(seriesName, destHosts, caEndpoints)
+		c.AddOrUpdateSeries(seriesName, destHosts)
 	}
 }

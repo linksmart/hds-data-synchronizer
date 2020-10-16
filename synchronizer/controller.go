@@ -36,7 +36,7 @@ func NewController(primaryHDSHost string, cd *certs.CertDirectory) (*Controller,
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse url %s: %v", primaryHDSHost, err)
 	}
-	hds, err := data.NewGrpcClient(hostUrl.Host, grpc.WithTransportCredentials(*creds)) //
+	hds, err := data.NewGrpcClient(hostUrl.Host+hostUrl.Path, grpc.WithTransportCredentials(*creds)) //
 	if err != nil {
 		return nil, fmt.Errorf("unable to connect to %s: %v", primaryHDSHost, err)
 	}
@@ -47,7 +47,7 @@ func NewController(primaryHDSHost string, cd *certs.CertDirectory) (*Controller,
 	return controller, nil
 }
 
-func (c *Controller) AddOrUpdateSeries(series string, destinationHosts []string, caEndpoints []string) {
+func (c *Controller) AddOrUpdateSeries(series string, destinationHosts []string) {
 	destConns := map[string]*data.GrpcClient{}
 	for _, destHost := range destinationHosts {
 		if c.destConnMap[destHost] == nil {
@@ -59,9 +59,9 @@ func (c *Controller) AddOrUpdateSeries(series string, destinationHosts []string,
 			hostUrl, err := url.Parse(destHost)
 			if err != nil {
 				log.Printf("failed to parse %s: %v", destHost, err)
-				continue //ToDo: A retry atempt for failed nodes
+				continue //ToDo: A retry attempt for failed nodes
 			}
-			conn, err := data.NewGrpcClient(hostUrl.Host, grpc.WithTransportCredentials(*creds)) //
+			conn, err := data.NewGrpcClient(hostUrl.Host+hostUrl.Path, grpc.WithTransportCredentials(*creds)) //
 			if err != nil {
 				log.Printf("unable to connect to %s: %v", destHost, err)
 				continue //ToDo: A retry atempt for failed nodes
