@@ -47,7 +47,7 @@ func LoadConfig(confPath *string) (*Config, error) {
 	}
 
 	if conf.Source == "" || conf.Destination == "" {
-		return nil, fmt.Errorf("HDS and TDD endpoints have to be defined")
+		return nil, fmt.Errorf("HDS source and destionation endpoints have to be defined")
 	}
 	sourceUrl, err := url.Parse(conf.Source)
 	if err != nil {

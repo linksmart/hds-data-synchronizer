@@ -1,9 +1,10 @@
 {
-  "hds": "localhost:8088",
-  "tdd": "http://localhost:8081",
+  "source": "dns://localhost:8088",
+  "destination": "dns://localhost:8098",
+  "syncInterval": "0",
   "tls": {
-    "ca": "./ca.pem",
-    "key": "./key.pem",
-    "cert": "./cert.pem"
+    "ca": "./tls/ca.cert",
+    "key": "./tls/client.key",
+    "cert": "./tls/client.cert"
   }
 }

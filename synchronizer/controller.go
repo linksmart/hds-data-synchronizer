@@ -47,53 +47,30 @@ func NewController(conf *common.Config) (*Controller, error) {
 		return nil, fmt.Errorf("unable to parse synchronization interval:%w", err)
 	}
 
-	// get the transport credentials
-	creds, err := getClientTransportCredentials(conf)
+	// get the clients for source
+	controller.srcRegistryClient, controller.srcDataClient, err = getClients(conf, conf.Source)
 	if err != nil {
-		return nil, fmt.Errorf("error getting transport credentials: %w", err)
+		return nil, fmt.Errorf("error initializing  gRPC client for source %s: %w", conf.Source, err)
 	}
 
-	srcUrl, err := url.Parse(conf.Source)
+	// get the clients for source
+	controller.dstRegistryClient, controller.dstDataClient, err = getClients(conf, conf.Destination)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse url %s: %s", conf.Destination, err)
-	}
-	src := srcUrl.Host
-	dstUrl, err := url.Parse(conf.Destination)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse url %s: %s", conf.Destination, err)
-	}
-	dst := dstUrl.Host
-	// Connect to the source
-	controller.srcDataClient, err = data.NewGrpcClient(src, grpc.WithTransportCredentials(*creds))
-	if err != nil {
-		return nil, fmt.Errorf("error dialing to the destination: %w", err)
-	}
-	controller.srcRegistryClient, err = registry.NewGrpcClient(src, grpc.WithTransportCredentials(*creds))
-	if err != nil {
-		return nil, fmt.Errorf("error dialing to the destination: %w", err)
+		return nil, fmt.Errorf("error initializing  gRPC client for destination %s: %w", conf.Destination, err)
 	}
 
-	// Connect to the destination
-	controller.dstDataClient, err = data.NewGrpcClient(dst, grpc.WithTransportCredentials(*creds))
-	if err != nil {
-		return nil, fmt.Errorf("error dialing to the destination: %w", err)
-	}
-	controller.dstRegistryClient, err = registry.NewGrpcClient(dst, grpc.WithTransportCredentials(*creds))
-	if err != nil {
-		return nil, fmt.Errorf("error dialing to the destination: %w", err)
-	}
 	controller.SyncMap = make(map[string]*Synchronization)
 	return controller, nil
 }
 
-func getClientTransportCredentials(conf *common.Config) (*credentials.TransportCredentials, error) {
+func getClients(conf *common.Config, urlStr string) (*registry.GrpcClient, *data.GrpcClient, error) {
 	serverCertFile := conf.TLS.Cert
 	serverPrivatekey := conf.TLS.Key
 	caFile := conf.TLS.CA
 	// Load the certificates from disk
 	certificate, err := tls.LoadX509KeyPair(serverCertFile, serverPrivatekey)
 	if err != nil {
-		return nil, fmt.Errorf("could not load server key pair: %s", err)
+		return nil, nil, fmt.Errorf("could not load client key pair: %s", err)
 	}
 
 	// Create a certificate pool from the certificate authority
@@ -104,30 +81,46 @@ func getClientTransportCredentials(conf *common.Config) (*credentials.TransportC
 	}
 	ca, err := ioutil.ReadFile(caFile)
 	if err != nil {
-		return nil, fmt.Errorf("could not read ca certificate: %s", err)
+		return nil, nil, fmt.Errorf("could not read CA certificate: %s", err)
 	}
 
 	// Append the client certificates from the CA
 	if ok := certPool.AppendCertsFromPEM(ca); !ok {
-		return nil, fmt.Errorf("failed to append client certs")
+		return nil, nil, fmt.Errorf("failed to append client certs")
 	}
-	url, err := url.Parse(conf.Destination)
+
+	parsedUrl, err := url.Parse(urlStr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse url %s: %s", conf.Destination, err)
+		return nil, nil, fmt.Errorf("failed to parse url %s: %s", conf.Destination, err)
 	}
-	host := url.Host
-	if strings.Contains(host, ":") {
-		host, _, err = net.SplitHostPort(host)
+
+	hostPort := parsedUrl.Host
+	var host string
+	if strings.Contains(hostPort, ":") {
+		host, _, err = net.SplitHostPort(hostPort)
 		if err != nil {
-			return nil, fmt.Errorf("error splitting the port and host name from %s: %v", conf.Destination, err)
+			return nil, nil, fmt.Errorf("error splitting the port and host name from %s: %v", urlStr, err)
 		}
+	} else {
+		host = hostPort
 	}
+	// get the transport credentials
 	creds := credentials.NewTLS(&tls.Config{
 		ServerName:   host,
 		Certificates: []tls.Certificate{certificate},
 		RootCAs:      certPool,
 	})
-	return &creds, nil
+
+	// Connect to the destination
+	dataClient, err := data.NewGrpcClient(hostPort, grpc.WithTransportCredentials(creds))
+	if err != nil {
+		return nil, nil, fmt.Errorf("error dialing to the destination: %w", err)
+	}
+	registryClient, err := registry.NewGrpcClient(hostPort, grpc.WithTransportCredentials(creds))
+	if err != nil {
+		return nil, nil, fmt.Errorf("error dialing to the destination: %w", err)
+	}
+	return registryClient, dataClient, nil
 }
 
 func (c Controller) StartSyncForAll() error {
@@ -139,7 +132,7 @@ func (c Controller) StartSyncForAll() error {
 
 		seriesList, total, err := c.srcRegistryClient.GetMany(page, perPage)
 		if err != nil {
-			return fmt.Errorf("error getting registry:%v", err)
+			return fmt.Errorf("error getting registry for %s:%v", c.sourceURL, err)
 		}
 		// For each registry entry, check if the synchronization is enabled for that particular time series
 		if page == 1 {
