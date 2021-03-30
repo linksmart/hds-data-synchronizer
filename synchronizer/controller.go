@@ -21,6 +21,9 @@ import (
 )
 
 type Controller struct {
+	// SyncMap contains the map of series with active synchronization
+	SyncMap map[string]*Synchronization
+
 	// srcDataClient is the connection to the source host
 	srcDataClient *data.GrpcClient
 	// dstDataClient is the connection to the destination host
@@ -34,7 +37,8 @@ type Controller struct {
 	destinationURL string
 	sourceURL      string
 
-	SyncMap map[string]*Synchronization
+	//stopSync is set when the sync application stops
+	stopSync chan bool
 }
 
 func NewController(conf *common.Config) (*Controller, error) {
@@ -60,6 +64,7 @@ func NewController(conf *common.Config) (*Controller, error) {
 	}
 
 	controller.SyncMap = make(map[string]*Synchronization)
+	controller.stopSync = make(chan bool)
 	return controller, nil
 }
 
@@ -123,16 +128,42 @@ func getClients(conf *common.Config, urlStr string) (*registry.GrpcClient, *data
 	return registryClient, dataClient, nil
 }
 
-func (c Controller) StartSyncForAll() error {
+func (c Controller) StartSyncForAll() {
+
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		err := c.updateSyncing()
+		if err != nil {
+			log.Println(err)
+		}
+		for {
+			select {
+			case <-c.stopSync:
+				ticker.Stop()
+				return
+			case <-ticker.C:
+				err := c.updateSyncing()
+				if err != nil {
+					log.Println(err)
+				}
+			}
+		}
+		defer ticker.Stop()
+	}()
+
+}
+func (c Controller) updateSyncing() error {
 	// Get all the registry entries
 	page := 1
 	perPage := 100
 	remaining := 0
+	skipDelete := make(map[string]bool)
+	log.Printf("Fetching registry of %s", c.sourceURL)
 	for do := true; do; do = remaining > 0 {
 
 		seriesList, total, err := c.srcRegistryClient.GetMany(page, perPage)
 		if err != nil {
-			return fmt.Errorf("error getting registry for %s:%v", c.sourceURL, err)
+			return fmt.Errorf("error fetching registry of %s:%v", c.sourceURL, err)
 		}
 		// For each registry entry, check if the synchronization is enabled for that particular time series
 		if page == 1 {
@@ -141,6 +172,11 @@ func (c Controller) StartSyncForAll() error {
 		remaining = remaining - len(seriesList)
 
 		for _, series := range seriesList {
+			skipDelete[series.Name] = true
+			if _, ok := c.SyncMap[series.Name]; ok {
+				// the series is being synced already. continue to other series
+				continue
+			}
 			err = c.dstRegistryClient.Add(series)
 			if err != nil {
 				if st, ok := status.FromError(err); ok {
@@ -157,17 +193,21 @@ func (c Controller) StartSyncForAll() error {
 		}
 		page += 1
 	}
+
+	for seriesName, series := range c.SyncMap {
+		if _, ok := skipDelete[seriesName]; !ok {
+			log.Printf("Deleting registry in destination:%s", seriesName)
+			err := c.dstRegistryClient.Delete(seriesName)
+			if err != nil {
+				log.Printf("error for deleting registry in destination:%s:%v", seriesName, err)
+			}
+			series.clear()
+		}
+	}
 	return nil
 }
-
-func (c Controller) UpdateSync(series string) {
-	//TODO:
-	// Check if the synchronization is enabled or not.
-	// If disabled, disable the enabled thread
-	// If enabled, enable the disabled thread
-}
-
 func (c Controller) StopSyncForAll() {
+	c.stopSync <- true
 	for _, s := range c.SyncMap {
 		s.clear()
 	}

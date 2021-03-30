@@ -38,10 +38,8 @@ func main() {
 	if err != nil {
 		log.Panicf("Error initializing synchronization: %s", err)
 	}
-	err = syncController.StartSyncForAll()
-	if err != nil {
-		log.Panicf("Error starting synchronization: %s", err)
-	}
+
+	syncController.StartSyncForAll()
 
 	handler := make(chan os.Signal, 1)
 	// Ctrl+C / Kill handling
