@@ -18,7 +18,7 @@ RUN apk --no-cache add ca-certificates
 WORKDIR /home
 
 LABEL NAME="LinkSmart HDS data synchronizer"
-
+ENV SYNC_DISABLE_LOG_TIME=1
 COPY --from=builder /home/hds-data-synchronizer .
 COPY sample-conf/conf.json /home/conf/
 
