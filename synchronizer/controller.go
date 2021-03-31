@@ -22,7 +22,7 @@ import (
 
 type Controller struct {
 	// SyncMap contains the map of series with active synchronization
-	SyncMap map[string]*Synchronization
+	SyncMap map[string]*Synchronizer
 
 	// srcDataClient is the connection to the source host
 	srcDataClient *data.GrpcClient
@@ -63,7 +63,7 @@ func NewController(conf *common.Config) (*Controller, error) {
 		return nil, fmt.Errorf("error initializing  gRPC client for destination %s: %w", conf.Destination, err)
 	}
 
-	controller.SyncMap = make(map[string]*Synchronization)
+	controller.SyncMap = make(map[string]*Synchronizer)
 	controller.stopSync = make(chan bool)
 	return controller, nil
 }
@@ -181,7 +181,7 @@ func (c Controller) updateSyncing() error {
 			if err != nil {
 				if st, ok := status.FromError(err); ok {
 					if st.Code() != codes.AlreadyExists {
-						return fmt.Errorf("error for creating registry in destination:%s:%v", series.Name, err)
+						return fmt.Errorf("error creating registry in destination:%s:%v", series.Name, err)
 					} else {
 						log.Printf("Continuing with existing timeseries %s in destination", series.Name)
 					}
@@ -196,11 +196,6 @@ func (c Controller) updateSyncing() error {
 
 	for seriesName, series := range c.SyncMap {
 		if _, ok := skipDelete[seriesName]; !ok {
-			log.Printf("Deleting registry in destination:%s", seriesName)
-			err := c.dstRegistryClient.Delete(seriesName)
-			if err != nil {
-				log.Printf("error for deleting registry in destination:%s:%v", seriesName, err)
-			}
 			series.clear()
 		}
 	}

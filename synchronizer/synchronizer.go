@@ -4,19 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"sync"
 	"time"
 
 	"github.com/farshidtz/senml/v2"
 	"github.com/linksmart/historical-datastore/data"
 )
 
-type backfillThread struct {
-	// running is set to true if the backfill is running
-	running bool
-	// mutex to protect the "running" variable
-	mutex *sync.Mutex
-}
 type Src struct {
 	// srcLastTS is the time corresponding to the latest record in the source
 	lastTS time.Time
@@ -24,13 +17,15 @@ type Src struct {
 	// client is the connection to the source host
 	client *data.GrpcClient
 }
+
 type Dst struct {
 	// dstLastTS is the time corresponding to the latest record in the destionation
 	lastTS time.Time
 	// client is the connection to the destination host
 	client *data.GrpcClient
 }
-type Synchronization struct {
+
+type Synchronizer struct {
 	// series to by synced
 	series string
 	// firstTS holds the starting time from which sync needs to start
@@ -41,22 +36,18 @@ type Synchronization struct {
 	src Src
 	//dst holds the information related to the destination series
 	dst Dst
-	// backfill holds the information related to the backfill thread
-	backfillThread backfillThread
-
 	// ctx is the context passed to gRPC Calls
 	ctx context.Context
 	// cancel function to cancel any of the running gRPC communication whenever the synchronization needs to be stopped
 	cancel context.CancelFunc
 }
 
-func newSynchronization(series string, srcClient *data.GrpcClient, dstClient *data.GrpcClient, interval time.Duration) (s *Synchronization) {
-
+func newSynchronization(series string, srcClient *data.GrpcClient, dstClient *data.GrpcClient, interval time.Duration) (s *Synchronizer) {
 	zeroTime := time.Time{}
 
-	s = &Synchronization{
+	s = &Synchronizer{
 		series:   series,
-		firstTS:  zeroTime, //TODO: This should come as an argument. But for the future
+		firstTS:  zeroTime, //TODO: This should come as an argument.
 		interval: interval,
 		src: Src{
 			lastTS: zeroTime,
@@ -66,10 +57,6 @@ func newSynchronization(series string, srcClient *data.GrpcClient, dstClient *da
 			lastTS: zeroTime,
 			client: dstClient,
 		},
-		backfillThread: backfillThread{
-			running: false,
-			mutex:   &sync.Mutex{},
-		},
 	}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 
@@ -78,11 +65,11 @@ func newSynchronization(series string, srcClient *data.GrpcClient, dstClient *da
 }
 
 // clear ensures graceful shutdown of the synchronization related to the series
-func (s *Synchronization) clear() {
+func (s *Synchronizer) clear() {
 	s.cancel()
 }
 
-func (s *Synchronization) synchronize() {
+func (s *Synchronizer) synchronize() {
 	canceled := false
 	if s.interval == 0 {
 		for !canceled {
@@ -97,15 +84,21 @@ func (s *Synchronization) synchronize() {
 	}
 }
 
-func (s *Synchronization) subscribeAndPublish() {
+func (s *Synchronizer) subscribeAndPublish() {
 	// get the latest measurement from source
+
 	var err error
 	s.src.lastTS, err = getLastTime(s.ctx, s.src.client, s.series, time.Time{}, time.Now())
 	if err != nil {
-		log.Printf("%s: error getting latest measurement from source:%v", s.series, err)
+		log.Printf("%s: failed to get latest measurement at source: %v", s.series, err)
 		return
 	}
 
+	s.dst.lastTS, err = getLastTime(s.ctx, s.dst.client, s.series, time.Time{}, time.Now())
+	if err != nil {
+		log.Printf("%s: failed to get latest measurement at destination:%v", s.series, err)
+		return
+	}
 	//subscribe to source HDS
 	responseCh, err := s.src.client.Subscribe(s.ctx, s.series)
 	log.Printf("Success subscribing to source %s", s.series)
@@ -114,48 +107,62 @@ func (s *Synchronization) subscribeAndPublish() {
 		return
 	}
 
+	backfillDoneCh := make(chan struct{})
+	if s.dst.lastTS.Before(s.src.lastTS) {
+		log.Printf("%s: src and destination time (%v vs %v) do not match. starting migrate", s.series, s.src.lastTS, s.dst.lastTS)
+		go s.backfill(s.dst.lastTS, s.src.lastTS, backfillDoneCh)
+	} else {
+		close(backfillDoneCh)
+	}
+	var buffer senml.Pack
 	for response := range responseCh {
 		if response.Err != nil {
-			log.Printf("%s: error while recieving stream: %v", s.series, response.Err)
+			log.Printf("%s: error recieving stream: %v", s.series, response.Err)
 			return
 		}
 		pack := response.Pack
-		latestInPack := getLatestInPack(pack)
-		if s.dst.lastTS.After(s.src.lastTS) == true {
-			log.Printf("%s: src and destination time (%v vs %v) do not match. starting backfill until %v", s.series, s.src.lastTS, s.dst.lastTS, latestInPack)
-			go s.backfill(s.dst.lastTS, latestInPack)
-			continue
-		}
-		err = s.dst.client.Submit(s.ctx, pack)
-		if err != nil {
-			log.Printf("%s: error copying entries : %v", s.series, err)
-		} else {
-			log.Printf("%s: copied SenML pack of len %d to destination", s.series, len(pack))
-			s.dst.lastTS = latestInPack
-		}
+		latestInPack := getLatestInPack(pack) // get latest in the pack
+		log.Printf("%s: src latest:%v, dest latest:%v, latestinpack %v", s.series, s.src.lastTS, s.dst.lastTS, latestInPack)
+		buffer = append(buffer, pack...)
+		select {
+		case <-backfillDoneCh:
+			//buffer = append(buffer, pack...)
+			err = s.dst.client.Submit(s.ctx, buffer)
+			if err != nil {
+				log.Printf("%s: error copying entries : %v", s.series, err)
+				return
+			} else {
+				log.Printf("%s: migrated SenML pack of len %d", s.series, len(pack))
+				s.dst.lastTS = latestInPack
+			}
+			buffer = nil
 
-		s.src.lastTS = latestInPack
+			s.src.lastTS = latestInPack
+		default:
+			log.Printf("%s: buffering %d records", s.series, len(pack))
+		}
 
 	}
 
 }
 
-func (s *Synchronization) periodicSynchronization() {
+func (s *Synchronizer) periodicSynchronization() {
 	var err error
 	s.src.lastTS, err = getLastTime(s.ctx, s.src.client, s.series, time.Time{}, time.Now())
 	if err != nil {
-		log.Printf("%s: unable to get latest source measurement%v", s.series, err)
+		log.Printf("%s: failed to get latest measurement at source: %v", s.series, err)
 		return
 	}
 
 	s.dst.lastTS, err = getLastTime(s.ctx, s.dst.client, s.series, time.Time{}, time.Now())
 	if err != nil {
-		log.Printf("%s: error getting latest destination measurement :%v", s.series, err)
+		log.Printf("%s: failed to get latest measurement at dest: %v", s.series, err)
 		return
 	}
 
-	if s.dst.lastTS.Equal(s.src.lastTS) == false {
-		go s.backfill(s.dst.lastTS, s.src.lastTS)
+	log.Printf("%s: periodicSync: src latest :%v, dest latest: %v", s.series, s.src.lastTS, s.dst.lastTS)
+	if s.src.lastTS.After(s.dst.lastTS) {
+		go s.migrate(s.dst.lastTS, s.src.lastTS)
 	}
 
 }
@@ -171,40 +178,20 @@ func getLastTime(ctx context.Context, client *data.GrpcClient, series string, fr
 	return data.FromSenmlTime(pack[0].Time), err
 }
 
-func (s *Synchronization) backfill(from time.Time, to time.Time) {
-	//backfill is supposed to run only once
-	s.backfillThread.mutex.Lock()
-	if s.backfillThread.running {
-		s.backfillThread.mutex.Unlock()
-		return
-	}
-	s.backfillThread.running = true
-	s.backfillThread.mutex.Unlock()
+func (s *Synchronizer) backfill(from time.Time, to time.Time, backfillDoneCh chan struct{}) {
+	defer close(backfillDoneCh)
+	s.migrate(from, to)
+}
+func (s *Synchronizer) migrate(from time.Time, to time.Time) {
+	adjustment := time.Microsecond
+	from = from.Add(adjustment)
+	to = to.Add(adjustment) //add little delay to `to` inorder to avoid missing the latest measurements because of floating point errors
 
-	defer func() {
-		s.backfillThread.mutex.Lock()
-		s.backfillThread.running = false
-		s.backfillThread.mutex.Unlock()
-	}()
-
-	destLatest, err := getLastTime(s.ctx, s.dst.client, s.series, from, to)
-	if err != nil {
-		log.Printf("%s: error getting the last timestamp from dest: %s", s.series, err)
-		return
-	}
-	log.Printf("%s: destLatest : %s", s.series, destLatest)
-
-	if to.Equal(destLatest) {
-		log.Printf("%s: skipping backfill as the destination is already updated", s.series)
-	} else if to.Before(destLatest) {
-		log.Printf("%s: destination is ahead of source. Should not have happened!!", s.series)
-	} else {
-		log.Printf("%s: starting backfill for destination, dest latest: %v, to:%v", s.series, destLatest, to)
-	}
+	log.Printf("%s: starting migrate from %v to %v", s.series, from, to)
 	ctx := s.ctx
 	destStream, err := s.dst.client.CreateSubmitStream(ctx)
 	if err != nil {
-		log.Printf("%s: Error getting the stream: %v", s.series, err)
+		log.Printf("%s: error getting the stream: %v", s.series, err)
 	}
 
 	defer s.dst.client.CloseSubmitStream(destStream)
@@ -212,8 +199,8 @@ func (s *Synchronization) backfill(from time.Time, to time.Time) {
 	q := data.Query{
 		Denormalize: data.DenormMaskName | data.DenormMaskTime | data.DenormMaskUnit,
 		SortAsc:     true,
-		From:        destLatest,
-		To:          to.Add(time.Second),
+		From:        from,
+		To:          to, //add a second to to to avoid missing the latest measurements because of floating point errors
 	}
 	sourceChannel, err := s.src.client.QueryStream(ctx, []string{s.series}, q)
 	if err != nil {
@@ -223,19 +210,19 @@ func (s *Synchronization) backfill(from time.Time, to time.Time) {
 	totalSynced := 0
 	for response := range sourceChannel {
 		if response.Err != nil {
-			log.Printf("%s: breaking backfill as there was error while recieving stream : %v", s.series, response.Err)
+			log.Printf("%s: migrate aborted: error recieving stream : %v", s.series, response.Err)
 			break
 		}
 		err = s.dst.client.SubmitToStream(destStream, response.Pack)
 		if err != nil {
-			log.Printf("%s: breaking backfill as there was error while submitting stream %s: %v", s.series, err)
+			log.Printf("%s: migrate aborted: error submitting stream %s: %v", s.series, err)
 			break
 		}
 		s.dst.lastTS = getLatestInPack(response.Pack)
 		totalSynced += len(response.Pack)
 
 	}
-	log.Printf("%s: migrated %d entries destination latest: %v", s.series, totalSynced, s.dst.lastTS)
+	log.Printf("%s: migrate: migrated %d entries. dest latest: %v", s.series, totalSynced, s.dst.lastTS)
 
 }
 
