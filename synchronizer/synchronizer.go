@@ -162,7 +162,7 @@ func (s *Synchronizer) periodicSynchronization() {
 
 	log.Printf("%s: periodicSync: src latest :%v, dest latest: %v", s.series, s.src.lastTS, s.dst.lastTS)
 	if s.src.lastTS.After(s.dst.lastTS) {
-		go s.migrate(s.dst.lastTS, s.src.lastTS)
+		s.migrate(s.dst.lastTS, s.src.lastTS)
 	}
 
 }
@@ -222,7 +222,7 @@ func (s *Synchronizer) migrate(from time.Time, to time.Time) {
 		totalSynced += len(response.Pack)
 
 	}
-	log.Printf("%s: migrate: migrated %d entries. dest latest: %v", s.series, totalSynced, s.dst.lastTS)
+	log.Printf("%s: migrated %d entries. dest latest: %v", s.series, totalSynced, s.dst.lastTS)
 
 }
 
