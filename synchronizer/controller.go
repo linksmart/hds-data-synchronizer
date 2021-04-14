@@ -170,7 +170,7 @@ func (c Controller) updateSyncing() error {
 			remaining = total
 		}
 		remaining = remaining - len(seriesList)
-
+	seriesLoop:
 		for _, series := range seriesList {
 			skipDelete[series.Name] = true
 			if _, ok := c.SyncMap[series.Name]; ok {
@@ -181,7 +181,8 @@ func (c Controller) updateSyncing() error {
 			if err != nil {
 				if st, ok := status.FromError(err); ok {
 					if st.Code() != codes.AlreadyExists {
-						return fmt.Errorf("error creating registry in destination:%s:%v", series.Name, err)
+						log.Printf("error creating registry in destination:%s:%v", series.Name, err)
+						continue seriesLoop
 					} else {
 						log.Printf("Continuing with existing timeseries %s in destination", series.Name)
 					}

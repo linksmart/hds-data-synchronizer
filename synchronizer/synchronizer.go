@@ -173,7 +173,7 @@ func getLastTime(ctx context.Context, client *data.GrpcClient, series string, fr
 		return time.Time{}, fmt.Errorf("series:%s, error:%s", series, err)
 	}
 	if len(pack) != 1 {
-		return to, nil
+		return from, nil
 	}
 	return data.FromSenmlTime(pack[0].Time), err
 }
