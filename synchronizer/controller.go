@@ -190,7 +190,6 @@ func (c Controller) updateSyncing() error {
 			} else {
 				log.Printf("Created timeseries %s in destination", series.Name)
 			}
-			time.Sleep(time.Second)
 			c.SyncMap[series.Name] = newSynchronization(series.Name, c.srcDataClient, c.dstDataClient, c.syncInterval)
 		}
 		page += 1
